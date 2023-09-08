@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.demo.mappers.AdOrderMapper">
+
+	<!-- 검색::주문현황 -->
+	<sql id="status">
+		<if test="status.size != 0">
+			where d.odr_status in
+			<foreach collection="status" item="item" index="index" separator="," open="(" close=")">
+            	#{item}
+             </foreach>
+		</if>
+	</sql>
+	
+	<!-- 검색::주문일(기간) -->
+	<sql id="searchTerm">
+		<if test="date_start != null and date_start != ''">
+			<![CDATA[
+			and (o.odr_date > #{date_start} and o.odr_date < #{date_end})
+			]]>
+		</if>
+	</sql>
+
+
+	<!-- 검색 조건 -->
+	<sql id="search">
+		<if test="cri.searchType != null">
+			<!-- 주문 번호 -->
+			<if test="cri.searchType == 'num'.toString()"> 
+				and d.odr_code like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 주문자 이름 -->
+			<if test="cri.searchType == 'name'.toString()"> 
+				and o.odr_name like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 주문자 아이디 -->
+			<if test="cri.searchType == 'id'.toString()"> 
+				and o.mem_id like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 주문자 핸드폰 -->
+			<if test="cri.searchType == 'phone'.toString()"> 
+				and o.mem_phone like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 주문자 주소 -->
+			<if test="cri.searchType == 'address'.toString()"> 
+				and o.mem_addr like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 전체 -->
+			<if test="cri.searchType == 'all'.toString()"> 
+				and (d.odr_code like '%' || #{cri.keyword} || '%')
+				and (o.odr_name like '%' || #{cri.keyword} || '%')
+				and (o.mem_id like '%' || #{cri.keyword} || '%')
+				and (o.mem_phone like '%' || #{cri.keyword} || '%')
+				and (o.mem_addr like '%' || #{cri.keyword} || '%')
+			</if>
+		</if>
+	</sql>
+
+	<!-- 모든 주문 목록(검색) -->
+	<select id="orderListAll" parameterType="map" resultType="AdOrderListVO">
+		select *
+		from	(select p.pdt_img, p.pdt_name,
+					d.odr_code, d.pdt_num, d.odr_amount, d.odr_price, d.odr_status,
+					o.mem_id, o.odr_total_price, o.odr_date,
+					row_number() over(order by d.odr_code desc, d.pdt_num) p_seq
+				from order_detail_tbl d 
+				inner join order_tbl o
+					on d.odr_code = o.odr_code
+				inner join product_tbl p
+					on d.pdt_num = p.pdt_num
+					
+					<include refid="status" /> 
+					<include refid="searchTerm" />
+					<include refid="search" /> )
+		 where p_seq between #{cri.rowStart} and #{cri.rowEnd}
+	</select>
+
+	<!-- 총 주문 개수 -->
+	<select id="countListAll" parameterType="map" resultType="int">
+		select count(*)
+		from order_detail_tbl d inner join order_tbl o
+			on d.odr_code = o.odr_code
+		<include refid="status" /> 
+		<include refid="searchTerm" />
+		<include refid="search" />
+	</select>
+
+	
+	<!-- 배송현황 수정 -->
+	<update id="updateStatus" parameterType="Map">
+		update order_detail_tbl
+		set odr_status = #{odr_status}
+		where odr_code = #{odr_code} and pdt_num = #{pdt_num}
+	</update>
+	
+	<!-- 주문 상세 정보 -->
+	<select id="readOrder" parameterType="int" resultType="OrderReadDetailVO" >
+		select d.odr_amount, d.pdt_num, d.odr_price, d.odr_status, 
+		p.pdt_name, p.pdt_img, p.pdt_price
+		from order_detail_tbl d
+		inner join product_tbl p
+			on d.pdt_num=p.pdt_num
+		where d.odr_code=#{odr_code}
+	</select>
+	
+	<!-- 주문자 정보 -->
+	<select id="getOrder" parameterType="int" resultType="OrderVO" >
+		select odr_code, mem_id, odr_name, odr_zipcode, odr_addr, odr_addr_d, odr_phone, odr_total_price, odr_date
+		from order_tbl
+		where odr_code=#{odr_code}
+	</select>
+	
+
+</mapper>

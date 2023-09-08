@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.demo.mappers.AdChartMapper">
+
+	<!-- 검색:: 1차 카테고리까지만 선택 -->
+	<sql id="SearchMainCategory">
+		<if test="cg_code_prt != null and cg_code_prt != ''">
+			where c.cg_code_prt = #{cg_code_prt}
+		</if>
+	</sql>
+
+	<!-- 검색:: 2차 카테고리까지 선택 -->
+	<sql id="SearchSubCategory">
+		<if test="cg_code != null and cg_code != ''">
+			where p.cg_code = #{cg_code}
+		</if>
+	</sql>
+
+	<!-- 검색:: 검색 기간 선택 -->
+	<sql id="SearchTerm">
+		<if test="startDate != null and startDate != ''">
+			<![CDATA[
+			where o.odr_date >= #{startDate} and o.odr_date <= #{endDate} 
+			]]>
+		</if>
+	</sql>
+
+	<!-- 검색:: 검색 기간에 따른 주문일 검색 -->
+	<sql id="searchOrderDate">
+		<choose>
+			<when test='period.equals("day")'>
+				where TO_CHAR(odr_date,'YYYYMMDD') = #{searchDate}
+			</when>
+			<when test='period.equals("month")'>
+				where TO_CHAR(odr_date,'YYYYMM') = #{searchDate}
+			</when>
+			<when test='period.equals("year")'>
+				where TO_CHAR(odr_date,'YYYY') = #{searchDate}
+			</when>
+			<otherwise>
+			</otherwise>
+		</choose>
+	</sql>
+
+	<!--연간(최근 5년 간) 주문 횟수/ 주문 가격 -->
+	<select id="chartYearCount" resultType="ChartDateVO">
+		<![CDATA[
+		select TO_CHAR(odr_date,'YYYY') as year, count(*) as count, sum(odr_total_price) as totalPrice
+		from order_tbl
+		where TO_CHAR(odr_date,'YYYY') <= TO_CHAR(sysdate, 'YYYY') 
+			and  TO_CHAR(odr_date,'YYYY') > TO_CHAR(ADD_MONTHS(sysdate, -60), 'YYYY') 
+		group by TO_CHAR(odr_date, 'YYYY')
+		order by to_char(odr_date, 'YYYY') asc
+		]]>
+	</select>
+	
+	<!--월간(최근 1년 간) 주문 횟수/ 주문 가격 -->
+	<select id="chartMonthCount" resultType="ChartDateVO">
+		<![CDATA[
+		select TO_CHAR(odr_date,'YYYYMM') as month, count(*) as count, sum(odr_total_price) as totalPrice
+		from order_tbl
+		where TO_CHAR(odr_date,'YYYYMM') <= TO_CHAR(sysdate, 'YYYY') ||'12' 
+			and  TO_CHAR(odr_date,'YYYYMM') >= TO_CHAR(sysdate, 'YYYY') || '01'
+		group by TO_CHAR(odr_date, 'YYYYMM')
+		order by to_char(odr_date, 'YYYYMM') asc
+		]]>
+	</select>
+	
+	
+	<!--일간(최근 10일 간) 주문 횟수/ 주문 가격 -->
+	<select id="chartDayCount" resultType="ChartDateVO">
+		<![CDATA[
+		select TO_CHAR(odr_date,'YYYYMMDD') as day, count(*) as count, sum(odr_total_price) as totalPrice
+		from order_tbl
+		where TO_CHAR(odr_date,'YYYYMMDD') <= TO_CHAR(sysdate, 'YYYYMMDD') 
+			and  TO_CHAR(odr_date,'YYYYMMDD') > TO_CHAR(sysdate-10, 'YYYYMMDD')
+		group by TO_CHAR(odr_date, 'YYYYMMDD')
+		order by to_char(odr_date, 'YYYYMMDD') asc	
+		]]>
+	</select>
+	
+	<!-- ===============================상품================================= -->
+	<!-- 상품별 가장 많이 팔린 상품 TOP 7(가격 정렬) -->
+	<!-- 검색 조건 : 1차/2차 카테고리 // 검색 기간 -->
+	<select id="chartProductPrice" parameterType="Map" resultType="ChartProductVO">
+		select p.pdt_name, s.totalPrice
+			from product_tbl p
+			inner join (select	p.pdt_num, 
+								sum(o.odr_amount*o.odr_price) as totalPrice,
+								row_number() over(order by sum(o.odr_amount*o.odr_price) desc)  p_seq
+								
+							from ( select pdt_num
+										from product_tbl p
+										inner join category_tbl c
+										on(p.cg_code = c.cg_code)
+										<include refid="SearchMainCategory" />
+										<include refid="SearchSubCategory" />
+									) p 
+							
+							inner join  (select d.odr_amount, d.odr_price, d.pdt_num
+												from order_detail_tbl d
+												inner join order_tbl o
+												on d.odr_code = o.odr_code
+												<include refid="SearchTerm" /> 
+											) o 
+							on p.pdt_num = o.pdt_num
+								
+							group by p.pdt_num
+						) s
+			on p.pdt_num = s.pdt_num
+			
+			where s.p_seq between 1 and 7
+			order by s.p_seq asc
+	</select>
+	
+	
+	<!-- 상품별 가장 많이 팔린 상품 TOP 7(수량 정렬) -->
+	<!-- 검색 조건 : 1차/2차 카테고리 // 검색 기간 -->
+	<select id="chartProductAmount" parameterType="Map" resultType="ChartProductVO">
+		select p.pdt_name, s.totalAmount
+			from product_tbl p
+			inner join (select	p.pdt_num, 
+								sum(o.odr_amount) as totalAmount,
+								row_number() over(order by sum(o.odr_amount) desc) p_seq
+								
+							from ( select pdt_num
+										from product_tbl p
+										inner join category_tbl c
+										on(p.cg_code = c.cg_code)
+										<include refid="SearchMainCategory" />
+										<include refid="SearchSubCategory" />
+									) p 
+							
+							inner join  (select d.odr_amount, d.odr_price, d.pdt_num
+												from order_detail_tbl d
+												inner join order_tbl o
+												on d.odr_code = o.odr_code
+												<include refid="SearchTerm" /> 
+											) o 
+							on p.pdt_num = o.pdt_num
+								
+							group by p.pdt_num
+						) s
+			on p.pdt_num = s.pdt_num
+			
+			where s.p_seq between 1 and 7
+			order by s.p_seq asc
+	</select>
+	
+	<!-- 상품별 - 판매가격 테이블 :: 해당 상품의 상세 정보를 가져옴  -->
+	<select id="tableProductPrice" parameterType="map" resultType="ChartProductTableVO">
+		select p.pdt_num, p.pdt_name, p.pdt_price, p.pdt_amount, s.totalPrice
+			from product_tbl p
+			inner join (select	p.pdt_num, 
+								sum(o.odr_amount*o.odr_price) as totalPrice,
+								row_number() over(order by sum(o.odr_amount*o.odr_price) desc)  p_seq
+								
+							from ( select pdt_num
+										from product_tbl p
+										inner join category_tbl c
+										on(p.cg_code = c.cg_code)
+										<include refid="SearchMainCategory" />
+										<include refid="SearchSubCategory" />
+									) p 
+							
+							inner join  (select d.odr_amount, d.odr_price, d.pdt_num
+												from order_detail_tbl d
+												inner join order_tbl o
+												on d.odr_code = o.odr_code
+												<include refid="SearchTerm" /> 
+											) o 
+							on p.pdt_num = o.pdt_num
+								
+							group by p.pdt_num
+						) s
+			on p.pdt_num = s.pdt_num
+			
+			where s.p_seq between 1 and 7
+			order by s.p_seq asc
+	
+	</select>
+	
+	<!-- 상품별 - 판매수량 테이블 :: 해당 상품의 상세 정보를 가져옴  -->
+	<select id="tableProductAmount" parameterType="map" resultType="ChartProductTableVO">
+		select p.pdt_num, p.pdt_name, p.pdt_price, p.pdt_amount, s.totalAmount
+			from product_tbl p
+			inner join (select	p.pdt_num, 
+								sum(o.odr_amount) as totalAmount,
+								row_number() over(order by sum(o.odr_amount) desc) p_seq
+								
+							from ( select pdt_num
+										from product_tbl p
+										inner join category_tbl c
+										on(p.cg_code = c.cg_code)
+										<include refid="SearchMainCategory" />
+										<include refid="SearchSubCategory" />
+									) p 
+							
+							inner join  (select d.odr_amount, d.odr_price, d.pdt_num
+												from order_detail_tbl d
+												inner join order_tbl o
+												on d.odr_code = o.odr_code
+												<include refid="SearchTerm" /> 
+											) o 
+							on p.pdt_num = o.pdt_num
+								
+							group by p.pdt_num
+						) s
+			on p.pdt_num = s.pdt_num
+			
+			where s.p_seq between 1 and 7
+			order by s.p_seq asc
+	
+	</select>
+	
+	<!-- ===============================회원================================= -->
+	<!-- 구매수량 차트 -->
+	<select id="chartMemberAmount" parameterType="Map" resultType="ChartMemberDTO">
+		<![CDATA[
+		select m.mem_id, totalAmount
+		from member_tbl m
+		inner join (select count(odr_code) as totalAmount, mem_id, row_number() over(order by count(odr_code) desc) p_seq 
+						from order_tbl
+		]]>
+						<include refid="searchOrderDate" />
+		<![CDATA[
+						group by mem_id
+					) o
+		on m.mem_id = o.mem_id
+		where p_seq <=7
+		order by p_seq asc
+		]]>
+	</select>
+	
+	<!-- 구매금액 차트 -->
+	<select id="chartMemberPrice" parameterType="Map" resultType="ChartMemberDTO">
+		<![CDATA[
+		select m.mem_id, totalPrice
+		from member_tbl m
+		inner join (select sum(odr_total_price) as totalPrice, mem_id,  row_number() over(order by sum(odr_total_price) desc) p_seq 
+						from order_tbl
+		]]>
+						<include refid="searchOrderDate" />
+		<![CDATA[
+						group by mem_id
+					) o
+		on m.mem_id = o.mem_id
+		where p_seq <=7
+		order by p_seq asc
+		]]>
+	</select>
+	
+	
+	<!-- 구매수량 테이블 -->
+	<select id="tableMemberAmount" parameterType="Map" resultType="ChartMemberTableVO">
+		<![CDATA[
+		select m.mem_id, mem_name, mem_email, mem_phone, mem_nick, mem_point, totalAmount
+		from member_tbl m
+		inner join (select count(odr_code) as totalAmount, mem_id, row_number() over(order by count(odr_code) desc) p_seq 
+						from order_tbl
+		]]>
+						<include refid="searchOrderDate" />
+		<![CDATA[
+						group by mem_id
+					) o
+		on m.mem_id = o.mem_id
+		where p_seq <=7
+		order by p_seq asc
+		]]>
+	</select>
+	
+	<!-- 구매금액 테이블 -->
+	<select id="tableMemberPrice" parameterType="Map" resultType="ChartMemberTableVO">
+		<![CDATA[
+		select m.mem_id, mem_name, mem_email, mem_phone, mem_nick, mem_point, totalPrice
+		from member_tbl m
+		inner join (select sum(odr_total_price) as totalPrice, mem_id,  row_number() over(order by sum(odr_total_price) desc) p_seq 
+						from order_tbl
+		]]>
+						<include refid="searchOrderDate" />
+		<![CDATA[
+						group by mem_id
+					) o
+		on m.mem_id = o.mem_id
+		where p_seq <=7
+		order by p_seq asc
+		]]>
+	</select>
+	
+</mapper>
