@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.demo.mappers.ProductMapper">
+
+	<!-- 1차 카테고리 출력 -->
+	<select id="mainCGList" resultType="CategoryVO">
+		select  cg_code, cg_code_prt, cg_name
+		from category_tbl
+		where cg_code_prt is null 
+	</select>
+
+	<!-- 2차 카테고리 출력 -->
+	<select id="subCGList" parameterType="string" resultType="CategoryVO">
+		select  cg_code, cg_code_prt, cg_name
+		from category_tbl
+		where cg_code_prt = #{cg_code}
+	</select>
+	
+	<!-- 카테고리 코드에 해당하는 카테고리명 -->
+	<select id="getCGName" parameterType="string" resultType="string">
+		select cg_name
+		from category_tbl
+		where cg_code=#{cg_code}
+	</select>
+	
+	
+	<!-- 해당 카테고리에 해당하는 상품리스트(페이지에 맞춰서) -->
+	<select id="productListCG" parameterType="Map" resultType="ProductVO">
+		select pdt_num, cg_code, pdt_name, pdt_price, pdt_discount, 
+				pdt_company, pdt_detail, pdt_img, pdt_amount, pdt_buy, 
+				pdt_date_sub, pdt_date_up
+		from	(select pdt_num, cg_code, pdt_name, pdt_price, pdt_discount, 
+					pdt_company, pdt_detail, pdt_img, pdt_amount, pdt_buy, 
+					pdt_date_sub, pdt_date_up, row_number() over(order by pdt_num desc) p_seq
+				from product_tbl
+				where cg_code=#{cg_code} and pdt_buy = 'Y')
+		 where p_seq between #{rowStart} and #{rowEnd} 
+	</select>
+	
+	<!-- 해당 카테고리의 상품 개수  -->
+	<select id="productCount" parameterType="string" resultType="int">
+		select count(pdt_num)
+		from product_tbl
+		where cg_code = #{cg_code} and pdt_buy = 'Y'
+	</select>
+	
+	
+	<!-- 해당 검색조건에 해당하는 상품리스트(페이지에 맞춰서) -->
+	<select id="productListSearch" parameterType="SearchCriteria" resultType="ProductVO">
+		select pdt_num, cg_code, pdt_name, pdt_price, pdt_discount, 
+				pdt_company, pdt_detail, pdt_img, pdt_amount, pdt_buy, 
+				pdt_date_sub, pdt_date_up
+		from	(select pdt_num, cg_code, pdt_name, pdt_price, pdt_discount, 
+					pdt_company, pdt_detail, pdt_img, pdt_amount, pdt_buy, 
+					pdt_date_sub, pdt_date_up, row_number() over(order by pdt_num desc) p_seq
+				from product_tbl
+				where ((pdt_name like '%' || #{keyword} || '%')
+				or (pdt_detail like '%' || #{keyword} || '%'))
+				and pdt_buy = 'Y'
+				)
+		 where p_seq between #{rowStart} and #{rowEnd} 
+	</select>
+	
+	<!-- 해당 검색조건에 해당하는  상품 개수  -->
+	<select id="productSearchCount" parameterType="string" resultType="int">
+		select count(pdt_num)
+		from product_tbl
+		where ((pdt_name like '%' || #{keyword} || '%')
+			 or (pdt_detail like '%' || #{keyword} || '%'))
+			 and pdt_buy = 'Y'
+	</select>
+	
+	
+	<!-- 상품 상세정보 읽기 -->
+	<select id="readProduct" parameterType="int" resultType="productVO">
+		select pdt_num, cg_code, pdt_name, pdt_price, pdt_discount, 
+				pdt_company, pdt_detail, pdt_img, pdt_amount, pdt_buy, 
+				pdt_date_sub, pdt_date_up
+		 from product_tbl
+		 where pdt_num=#{pdt_num}
+	
+	</select>
+	
+	<!-- 새로운 상품 5개 가져오기 -->
+	<select id="newItems" resultType="productVO">
+		select *
+		from (select  pdt_num, cg_code, pdt_name, pdt_price, pdt_discount, 
+					pdt_company, pdt_detail, pdt_img, pdt_amount, pdt_buy, 
+					pdt_date_sub, pdt_date_up, row_number() over(order by pdt_date_sub desc, pdt_num desc) p_seq
+				from product_tbl
+			  )
+		where p_seq between 1 and 5
+		order by p_seq asc
+	</select>
+	
+	<!-- 베스트 상품 4개 가져오기 -->
+	<select id="bestItems" resultType="productVO">
+		select p.pdt_num, cg_code, pdt_name, pdt_price, pdt_discount, 
+				pdt_company, pdt_detail, pdt_img, pdt_amount, pdt_buy, 
+				pdt_date_sub, pdt_date_up
+		from		(select pdt_num, sum(odr_amount) as total, row_number() over(order by sum(odr_amount) desc) p_seq
+						from order_detail_tbl
+						group by pdt_num
+						order by sum(odr_amount) desc
+					) o
+		inner join product_tbl p
+		on o.pdt_num = p.pdt_num
+		
+		where p_seq between 1 and 5
+		order by p_seq asc
+	</select>
+	
+</mapper>

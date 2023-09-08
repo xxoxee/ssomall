@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.demo.mappers.AdMemberMapper">
+
+	<!-- 모든 회원 목록(총 주문 횟수) -->
+	<select id="memberTotalOrder" parameterType="string" resultType="int">
+		select count(odr_code)
+		from order_tbl
+		where mem_id=#{mem_id}
+	</select>
+
+
+	<!-- 모든 회원 목록(총 주문 가격) -->
+	<select id="memberTotalPrice" parameterType="string" resultType="int">
+		select nvl(sum(odr_total_price), 0)
+		from order_tbl
+		where mem_id=#{mem_id}
+	</select>
+	
+	
+	<!-- 모든 회원의 이메일 주소 가져옴 -->
+	<select id="memberEmailAll" resultType="string">
+		select mem_email
+		from member_tbl
+	</select>
+	
+	<!-- 수신 여부 검색 -->
+	<sql id="accept">
+		<if test="accept != null">
+			<if test="accept == 'Y'.toString()">
+				where mem_accept_e = #{accept}
+			</if>
+			<if test="accept == 'N'.toString()">
+				where mem_accept_e = #{accept}
+			</if>
+			<if test="accept == 'ALL'.toString()">
+				where (mem_accept_e = 'Y' or mem_accept_e = 'N')
+			</if>
+		</if>
+	</sql>
+	
+	<!-- 검색 조건 -->
+	<sql id="search">
+		<if test="cri.searchType != null">
+			<!-- 이름 -->
+			<if test="cri.searchType == 'name'.toString()"> 
+				and mem_name like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 아이디 -->
+			<if test="cri.searchType == 'id'.toString()"> 
+				and mem_id like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 핸드폰 -->
+			<if test="cri.searchType == 'phone'.toString()"> 
+				and mem_phone like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 이메일 -->
+			<if test="cri.searchType == 'email'.toString()"> 
+				and mem_email like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 주소 -->
+			<if test="cri.searchType == 'address'.toString()"> 
+				and mem_addr like '%' || #{cri.keyword} || '%'
+			</if>
+			<!-- 전체 -->
+			<if test="cri.searchType == 'all'.toString()"> 
+				and (mem_name like '%' || #{cri.keyword} || '%')
+				and (mem_id like '%' || #{cri.keyword} || '%')
+				and (mem_phone like '%' || #{cri.keyword} || '%')
+				and (mem_email like '%' || #{cri.keyword} || '%')
+				and (mem_addr like '%' || #{cri.keyword} || '%')
+			</if>
+		</if>
+	</sql>
+	
+	
+	<!--  검색/전체 회원 목록 -->
+	<select id="memberListSearch" parameterType="map" resultType="AdMemberListVO">
+		select *
+		from	(select mem_id, mem_name, mem_nick, 
+						mem_email, mem_accept_e,
+						mem_point, mem_date_sub,
+						row_number() over(order by mem_date_sub desc) p_seq
+				from member_tbl
+				<include refid="accept" />
+				<include refid="search" />) 
+		 where p_seq between #{cri.rowStart} and #{cri.rowEnd}
+	</select>
+	
+	<!-- 검색 조건에 해당하는 총 회원 수 --> 
+	<select id="countListSearch"  parameterType="map" resultType="int">
+		select count(mem_id)
+		from member_tbl
+		<include refid="accept" />
+		<include refid="search" />
+	</select>
+
+
+	<!-- 회원 정보 가져오기 -->
+	<select id="readMemberDetail" parameterType="string" resultType="MemberVO">
+		select *
+		from member_tbl
+		where mem_id=#{mem_id}
+	</select>
+	
+</mapper>

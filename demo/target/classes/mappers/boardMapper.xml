@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.demo.mappers.BoardMapper">
+	
+	<!-- 검색::주문일(기간) -->
+	<sql id="searchTerm">
+		<if test='term.startDate != null and !term.startDate.equals("")'>
+			<![CDATA[
+			and (brd_date_reg > #{term.startDate} and brd_date_reg < #{term.endDate})
+			]]>
+		</if>
+	</sql>
+	
+	<!-- 검색 조건 -->
+	<sql id="search">
+		<if test="cri.searchType != null">
+			<if test="cri.searchType == 'title'.toString()"> 
+				and upper(brd_title) like '%' || upper(#{cri.keyword}) || '%'
+			</if>
+			<if test="cri.searchType == 'content'.toString()"> 
+				and upper(brd_content) like '%' || upper(#{cri.keyword}) || '%'
+			</if>
+			<if test="cri.searchType == 'writer'.toString()"> 
+				and upper(mem_id) like '%' || upper(#{cri.keyword}) || '%'
+			</if>
+			<if test="cri.searchType == 'titleContent'.toString()"> 
+				and (upper(brd_title) like '%' || upper(#{cri.keyword}) || '%')
+				and (upper(brd_content) like '%' || upper(#{cri.keyword}) || '%')
+			</if>
+			<if test="cri.searchType == 'all'.toString()"> 
+				and (upper(brd_title) like '%' || upper(#{cri.keyword}) || '%')
+				and (upper(brd_content) like '%' || upper(#{cri.keyword}) || '%')
+				and (upper(mem_id) like '%' || upper(#{cri.keyword}) || '%')
+			</if>
+		</if>
+	</sql>
+	
+	<!-- 게시글 순서 업데이트 -->
+	<update id="addOrder" parameterType="Map">
+		update board_tbl
+		set brd_order = brd_order + 1
+		where brd_group = #{brd_group} and brd_order >= #{brd_order}
+	</update>
+	
+	<!-- 게시판 글 쓰기 (원글) -->
+	<insert id="write" parameterType="BoardVO">
+		insert into board_tbl(brd_num, mem_id, brd_title, brd_content, 
+								brd_group, brd_order, brd_level)
+		values(seq_brd_num.nextval, #{mem_id}, #{brd_title}, #{brd_content}, 
+				seq_brd_group.nextval, #{brd_order}, #{brd_level})
+	</insert>	
+	
+	<!-- 게시판 글 쓰기 (댓글) -->
+	<insert id="reply" parameterType="BoardVO">
+		insert into board_tbl(brd_num, mem_id, brd_title, brd_content, 
+								brd_group, brd_order, brd_level)
+		values(seq_brd_num.nextval, #{mem_id}, #{brd_title}, #{brd_content}, 
+				#{brd_group}, #{brd_order}, #{brd_level})
+	</insert>
+	
+	<!-- 게시글 목록 리스트(검색포함) / 공지사항 제외 -->
+	<select id="list" parameterType="map" resultType="BoardVO">
+		select *
+		from(select brd_num, mem_id, brd_title, brd_content, brd_date_reg, 
+					brd_group, brd_order, brd_level, brd_count, brd_is_del, 
+					row_number() over(order by brd_group desc, brd_order asc) p_seq
+				from board_tbl
+				where brd_group not in(0) 
+				<include refid="searchTerm" />
+				<include refid="search" /> ) 
+		where p_seq between #{cri.rowStart} and #{cri.rowEnd}
+	</select>
+	
+	<!-- 게시글 총 개수 -->
+	<select id="count" parameterType="map" resultType="int">
+		select count(brd_num)
+		from board_tbl
+		where brd_group not in(0)
+		<include refid="searchTerm" />
+		<include refid="search" />
+	</select>
+	
+	<!-- 게시글 삭제 -->
+	<update id="delete" parameterType="int">
+		update board_tbl
+		set brd_is_del='Y'
+		where brd_num=#{brd_num}
+	</update>
+	
+	<!-- 게시글 수정 -->
+	<update id="modify" parameterType="BoardVO">
+		update board_tbl
+		set brd_title=#{brd_title}, brd_content=#{brd_content}
+		where brd_num=#{brd_num}
+	</update>
+
+	<!-- 공지사항 상위 5개 가져오기 -->
+	<select id="listNoticeLimit5" resultType="BoardVO">
+	<![CDATA[
+		select *
+		from (select *
+				from board_tbl
+				where brd_group = 0
+				order by brd_date_reg desc)
+		where rownum <=5
+	]]>
+	</select>
+
+	<!-- 공지사항 전부 가져오기 -->
+	<select id="listNotice" parameterType="Map" resultType="BoardVO">
+		select *
+		from board_tbl
+		where brd_group = 0
+		<include refid="searchTerm" />
+		<include refid="search" />
+		order by brd_date_reg desc
+	</select>
+	
+	<!-- 공지사항 개수 -->
+	<select id="countNotice" parameterType="Map" resultType="int">
+		select count(brd_num)
+		from board_tbl
+		where brd_group = 0
+		<include refid="searchTerm" />
+		<include refid="search" />
+	</select>	
+	
+	<!-- 해당 게시글 정보 읽어오기 -->
+	<select id="read" parameterType="int" resultType="BoardVO">
+		select *
+		from board_tbl
+		where brd_num = #{brd_num}
+	</select>
+	
+	<!-- 조회수 증가 -->
+	<update id="updateCount" parameterType="int">
+		update board_tbl
+		set brd_count = brd_count +1
+		where brd_num = #{brd_num}
+	</update>
+	
+</mapper>
